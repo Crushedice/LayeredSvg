@@ -1,0 +1,218 @@
+<title>Nix Eye</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600&family=IBM+Plex+Sans:wght@400;500&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="layers/layers.css">
+<link rel="stylesheet" href="eye.css">
+<style>
+  /* Layout: one stage, a control rail beneath it, a telemetry strip; console-panel feel, single dark look by choice (matches the art). */
+  :root {
+    color-scheme: dark;
+    --bg: #0e0c13;
+    --panel: #17141e;
+    --line: #2b2536;
+    --fg: #ece6f1;
+    --muted: #9b91a8;
+    --accent: #ff7a1f;
+    --accent-ink: #1a0d03;
+    --check-a: #1b1822;
+    --check-b: #24202d;
+    --display: "Chakra Petch", "Segoe UI", system-ui, sans-serif;
+    --body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  }
+  html, body { background: var(--bg); color: var(--fg); }
+  body { font: 15px/1.55 var(--body); padding-inline: 16px; padding-block: 24px 48px; }
+  .wrap { max-width: 1120px; margin-inline: auto; display: grid; gap: 20px; }
+
+  header { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px 24px; }
+  h1 { font: 600 clamp(26px, 4vw, 34px)/1.1 var(--display); letter-spacing: .02em; margin: 0; text-wrap: balance; }
+  h1 span { color: var(--accent); }
+  header p { margin: 0; color: var(--muted); max-width: 60ch; }
+
+  .stage {
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    overflow: hidden;
+    background: repeating-conic-gradient(var(--check-a) 0 25%, var(--check-b) 0 50%) 0 0 / 24px 24px;
+  }
+
+  .rail { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px 28px; }
+  @media (min-width: 960px) { .rail { grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr) minmax(0, 1fr); } }
+  fieldset { border: 0; margin: 0; padding: 0; min-width: 0; display: grid; gap: 8px; align-content: start; }
+  legend, .label {
+    font: 500 11px/1 var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--muted);
+    padding: 0; margin-bottom: 8px;
+  }
+  .seg { display: flex; flex-wrap: wrap; gap: 6px; }
+  .seg input { position: absolute; opacity: 0; pointer-events: none; }
+  .seg label, button {
+    font: 500 14px/1 var(--display); letter-spacing: .04em;
+    color: var(--fg); background: var(--panel);
+    border: 1px solid var(--line); border-radius: 4px;
+    padding: 9px 12px; cursor: pointer; user-select: none;
+  }
+  .seg label:hover, button:hover { border-color: var(--muted); }
+  .seg input:checked + label { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+  .seg input:focus-visible + label, button:focus-visible, .checks input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .hint { margin: 0; color: var(--muted); font-size: 13px; min-height: 2.6em; }
+
+  .checks { display: flex; flex-wrap: wrap; gap: 6px 16px; }
+  .checks label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; font-size: 14px; }
+  .checks input { accent-color: var(--accent); }
+
+  .telemetry {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 1px;
+    background: var(--line); border: 1px solid var(--line); border-radius: 6px; overflow: hidden;
+  }
+  .telemetry div { background: var(--panel); padding: 10px 14px; display: grid; gap: 4px; }
+  .telemetry dt { font: 500 10.5px/1 var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+  .telemetry dd { margin: 0; font: 500 15px/1.2 var(--mono); font-variant-numeric: tabular-nums; }
+
+  .notes { border-top: 1px solid var(--line); padding-top: 16px; display: grid; gap: 6px; color: var(--muted); font-size: 14px; }
+  .notes h2 { font: 600 16px/1.2 var(--display); color: var(--fg); margin: 0 0 4px; letter-spacing: .03em; }
+  .notes ul { margin: 0; padding-left: 1.1em; display: grid; gap: 4px; max-width: 80ch; }
+  .notes code { font-family: var(--mono); font-size: .92em; color: var(--fg); }
+
+  /* layer inspection toggles */
+  .nix-eye.hide-base .l-base,
+  .nix-eye.hide-iris .nix-iris-body,
+  .nix-eye.hide-pupil .nix-pupil,
+  .nix-eye.hide-lids .l-blink,
+  .nix-eye.hide-glow .l-glow { visibility: hidden; }
+  .nix-eye.show-clip .nix-socket { background: rgb(255 0 200 / .28); }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>Nix <span>Eye</span></h1>
+    <p>Layered 2.5D eye built from the painted frames: frame-swap blinks, saccades, a swept glow mask, and four affect states.</p>
+  </header>
+
+  <div class="stage">
+    <div class="nix-eye" id="eye" data-affect="idle">
+      <img class="layer l-base" src="layers/base.webp" alt="Close-up of an anime eye with an orange slit iris and glowing circuit lines">
+      <div class="layer nix-socket">
+        <div class="layer l-iris nix-iris">
+          <img class="fill nix-iris-body" src="layers/iris.webp" alt="">
+          <img class="fill nix-pupil" src="layers/pupil.webp" alt="">
+        </div>
+        <div class="layer l-sclera nix-lidshade"></div>
+      </div>
+      <div class="layer l-blink">
+        <img class="nix-lid" data-frame="blink-02" src="layers/blink-02.webp" alt="" hidden>
+        <img class="nix-lid" data-frame="blink-03" src="layers/blink-03.webp" alt="" hidden>
+        <img class="nix-lid" data-frame="blink-04" src="layers/blink-04.webp" alt="" hidden>
+        <img class="nix-lid" data-frame="blink-05" src="layers/blink-05.webp" alt="" hidden>
+        <img class="nix-lid" data-frame="blink-06" src="layers/blink-06.webp" alt="" hidden>
+        <img class="nix-lid" data-frame="blink-07" src="layers/blink-07.webp" alt="" hidden>
+        <img class="nix-lid" data-frame="blink-08" src="layers/blink-08.webp" alt="" hidden>
+        <img class="nix-lid" data-frame="blink-09" src="layers/blink-09.webp" alt="" hidden>
+      </div>
+      <div class="layer l-glow">
+        <img class="fill nix-glow-dim" src="layers/glow.webp" alt="">
+        <img class="fill nix-glow-base" src="layers/glow.webp" alt="">
+        <img class="fill nix-glow-band" src="layers/glow.webp" alt="">
+      </div>
+    </div>
+  </div>
+
+  <div class="rail">
+    <fieldset>
+      <legend>Affect</legend>
+      <div class="seg" id="affect">
+        <input type="radio" name="affect" id="a-idle" value="idle" checked><label for="a-idle">Idle</label>
+        <input type="radio" name="affect" id="a-sharp" value="sharp"><label for="a-sharp">Sharp</label>
+        <input type="radio" name="affect" id="a-engaged" value="engaged"><label for="a-engaged">Engaged</label>
+        <input type="radio" name="affect" id="a-reticent" value="reticent"><label for="a-reticent">Reticent</label>
+        <input type="radio" name="affect" id="a-flat" value="flat"><label for="a-flat">Flat</label>
+      </div>
+      <p class="hint" id="affect-hint"></p>
+    </fieldset>
+
+    <fieldset>
+      <legend>Blink</legend>
+      <div class="seg" id="style">
+        <input type="radio" name="style" id="s-anime" value="anime" checked><label for="s-anime">Anime &middot; 3 frames</label>
+        <input type="radio" name="style" id="s-full" value="full"><label for="s-full">Full &middot; 7 frames</label>
+      </div>
+      <div class="seg">
+        <button type="button" id="blink-now">Blink now</button>
+        <button type="button" id="blink-double">Double blink</button>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Layers</legend>
+      <div class="checks" id="layers">
+        <label><input type="checkbox" id="l-base" value="base" checked> Base</label>
+        <label><input type="checkbox" id="l-iris" value="iris" checked> Iris</label>
+        <label><input type="checkbox" id="l-pupil" value="pupil" checked> Pupil</label>
+        <label><input type="checkbox" id="l-lids" value="lids" checked> Lids</label>
+        <label><input type="checkbox" id="l-glow" value="glow" checked> Glow</label>
+        <label><input type="checkbox" id="l-clip" value="clip"> Show clip</label>
+      </div>
+    </fieldset>
+  </div>
+
+  <dl class="telemetry" aria-live="off">
+    <div><dt>Affect</dt><dd id="t-affect">idle</dd></div>
+    <div><dt>Lid frame</dt><dd id="t-frame">open</dd></div>
+    <div><dt>Gaze x / y</dt><dd id="t-gaze">0.0 / 0.0</dd></div>
+    <div><dt>Pupil scaleX</dt><dd id="t-pupil">1.00</dd></div>
+    <div><dt>Next blink</dt><dd id="t-next">&mdash;</dd></div>
+  </dl>
+
+  <section class="notes">
+    <h2>How it's put together</h2>
+    <ul>
+      <li>Stack, bottom to top: base (iris painted out) &rarr; iris and pupil inside the sclera clip &rarr; blink frame &rarr; glow. The lid frames have the eye opening cut out, so the live iris keeps moving during a blink and while Reticent holds the half-closed lid.</li>
+      <li>The pupil is split from the iris and the slit underneath is inpainted, so <code>scaleX</code> narrows or widens just the slit.</li>
+      <li>Gaze is in percent of the iris box. Saccades jump in 45 ms and hold for the affect's interval, with small microsaccades in between.</li>
+      <li>Every layer is generated by <code>tools/build_eye_layers.py</code> from the source PNGs.</li>
+    </ul>
+  </section>
+</div>
+
+<script type="module">
+  import { mountEye } from './eye.js';
+
+  const HINTS = {
+    idle: 'Baseline: blinks every 2.5\u20136 s, occasional double blink, saccades every 1\u20133 s.',
+    sharp: 'Narrow pupil, brighter iris and glow, faster sweep. Gaze stays tight and centred.',
+    engaged: 'Wide pupil and frequent saccades over a wider range. More double blinks.',
+    reticent: 'Holds the half-closed lid and looks away down-left. Few, small eye movements.',
+    flat: 'Circuit lines dimmed below their painted level, slow blinks, little movement.',
+  };
+
+  const root = document.getElementById('eye');
+  const $ = id => document.getElementById(id);
+  let last = null;
+
+  const eye = await mountEye(root, { onState: s => { last = s; } });
+
+  const setHint = a => { $('affect-hint').textContent = HINTS[a]; };
+  setHint('idle');
+
+  $('affect').addEventListener('change', e => { eye.setAffect(e.target.value); setHint(e.target.value); });
+  $('style').addEventListener('change', e => eye.setBlinkStyle(e.target.value));
+  $('blink-now').addEventListener('click', () => eye.blink(false));
+  $('blink-double').addEventListener('click', () => eye.blink(true));
+  $('layers').addEventListener('change', e => {
+    const v = e.target.value;
+    if (v === 'clip') root.classList.toggle('show-clip', e.target.checked);
+    else root.classList.toggle(`hide-${v}`, !e.target.checked);
+  });
+
+  (function tick() {
+    if (last) {
+      $('t-affect').textContent = last.affect;
+      $('t-frame').textContent = last.frame ?? 'open';
+      $('t-gaze').textContent = `${last.gaze[0].toFixed(1)} / ${last.gaze[1].toFixed(1)}`;
+      $('t-pupil').textContent = parseFloat(getComputedStyle(root).getPropertyValue('--pupil')).toFixed(2);
+      const s = (last.nextBlinkAt - performance.now()) / 1000;
+      $('t-next').textContent = s > 0 ? `${s.toFixed(1)} s` : 'now';
+    }
+    setTimeout(() => requestAnimationFrame(tick), 100);
+  })();
+</script>

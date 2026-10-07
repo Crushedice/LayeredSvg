@@ -1,0 +1,71 @@
+/* Nix eye — layered 2.5D eye. Box positions come from layers/layers.css.
+   Visual state per affect lives here as custom properties; timers live in eye.js. */
+.nix-eye {
+  --pupil: 1;          /* scaleX of the slit */
+  --iris-lum: 1;       /* iris brightness */
+  --glow-base: .12;    /* constant lift on the circuit lines */
+  --glow-band: 1.25;   /* brightness of the sweeping band */
+  --glow-dim: 0;       /* darkens the lines below the painted level */
+  --glow-sweep: 3s;
+  --saccade-ms: 45ms;
+  --glow-color: #ff6a00;
+  position: relative;
+  width: 100%;
+  max-width: 100%;
+  overflow: hidden;
+  isolation: isolate;
+}
+.nix-eye .layer { position: absolute; }
+.nix-eye .fill { position: absolute; inset: 0; width: 100%; height: 100%; max-width: none; display: block; }
+
+/* eye opening: everything inside is clipped to the sclera path */
+.nix-eye .nix-socket {
+  inset: 0;
+  -webkit-mask: url(layers/sclera.svg) 0 0 / 100% 100% no-repeat;
+  mask: url(layers/sclera.svg) 0 0 / 100% 100% no-repeat;
+}
+.nix-eye .nix-iris {
+  transform: translate(calc(var(--gx, 0) * 1%), calc(var(--gy, 0) * 1%));
+  transition: transform var(--saccade-ms) cubic-bezier(.2, .9, .3, 1);
+  filter: brightness(var(--iris-lum));
+  will-change: transform;
+}
+.nix-eye .nix-pupil {
+  transform: scaleX(var(--pupil));
+  transform-origin: var(--pupil-origin, 50%) 50%;
+  transition: transform .4s cubic-bezier(.3, .7, .3, 1);
+}
+/* the painted upper lid casts a little shadow onto the iris */
+.nix-eye .nix-lidshade {
+  background: linear-gradient(to bottom, rgb(14 8 24 / .55), rgb(14 8 24 / 0) 38%);
+  pointer-events: none;
+}
+
+/* blink frames: one visible at a time, swapped by eye.js */
+.nix-eye .nix-lid { width: 100%; height: 100%; max-width: none; display: block; position: absolute; inset: 0; }
+.nix-eye .nix-lid[hidden] { display: none; }
+
+/* circuit glow */
+.nix-eye .nix-glow-dim { filter: brightness(.35) saturate(.6); opacity: var(--glow-dim); }
+.nix-eye .nix-glow-base { mix-blend-mode: screen; opacity: var(--glow-base); }
+.nix-eye .nix-glow-band {
+  mix-blend-mode: screen;
+  filter: brightness(var(--glow-band)) drop-shadow(0 0 6px var(--glow-color));
+  -webkit-mask: linear-gradient(to bottom, transparent 38%, #000 47%, #000 53%, transparent 62%) 0 100% / 100% 300% no-repeat;
+  mask: linear-gradient(to bottom, transparent 38%, #000 47%, #000 53%, transparent 62%) 0 100% / 100% 300% no-repeat;
+  animation: nix-sweep var(--glow-sweep) linear infinite;
+}
+@keyframes nix-sweep {
+  from { -webkit-mask-position: 0 100%; mask-position: 0 100%; }
+  to   { -webkit-mask-position: 0 0;    mask-position: 0 0; }
+}
+
+/* affect states */
+.nix-eye[data-affect="sharp"]    { --pupil: .7;  --iris-lum: 1.12; --glow-base: .3;  --glow-band: 1.8; --glow-sweep: 1.8s; }
+.nix-eye[data-affect="engaged"]  { --pupil: 1.35; --iris-lum: 1.05; --glow-base: .2;  --glow-band: 1.5; --glow-sweep: 2.5s; }
+.nix-eye[data-affect="reticent"] { --pupil: .9;  --iris-lum: .9;  --glow-base: 0;   --glow-band: 1.1; --glow-sweep: 4.5s; --glow-dim: .3; }
+.nix-eye[data-affect="flat"]     { --pupil: 1;   --iris-lum: .82; --glow-base: 0;   --glow-band: .9;  --glow-sweep: 7s; --glow-dim: .65; }
+
+@media (prefers-reduced-motion: reduce) {
+  .nix-eye .nix-glow-band { animation: none; -webkit-mask-position: 0 50%; mask-position: 0 50%; }
+}
