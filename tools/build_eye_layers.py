@@ -97,8 +97,13 @@ def sclera_mask(base):
     return fill_holes(m)
 
 
-def opening_mask(frame, sclera):
-    """Visible eye opening (sclera + iris) of a blink frame, within the open-eye sclera."""
+def opening_mask(frame, sclera, pupil_cols):
+    """Visible eye opening (sclera + iris) of a blink frame, within the open-eye sclera.
+
+    The frame's own painted pupil is dark like the lid, so it would stay in the patch
+    as a ghost slit once the live iris moves. Across pupil_cols (x0, x1) the opening's
+    top and bottom edges are bridged straight from the columns either side.
+    """
     h, s, v = hsv_split(frame)
     pale = (v > 85) & (s < 120) & (h > 95) & (h < 140)
     warm = (v > 110) & (s > 110) & ((h < 35) | (h > 165))
@@ -110,7 +115,16 @@ def opening_mask(frame, sclera):
         if st[j, cv2.CC_STAT_AREA] > 800:
             keep[lab == j] = 255
     keep = cv2.morphologyEx(keep, cv2.MORPH_CLOSE, ellipse(15))
-    return fill_holes(keep) & sclera
+    keep = fill_holes(keep)
+    x0, x1 = pupil_cols
+    left, right = np.where(keep[:, x0 - 1])[0], np.where(keep[:, x1 + 1])[0]
+    if len(left) and len(right):
+        for x in range(x0, x1 + 1):
+            t = (x - x0 + 1) / (x1 - x0 + 2)
+            top = round(left.min() + t * (right.min() - left.min()))
+            bottom = round(left.max() + t * (right.max() - left.max()))
+            keep[top:bottom + 1, x] = 255
+    return keep & sclera
 
 
 def blink_region(base, frames):
@@ -146,8 +160,9 @@ def split_pupil(iris_bgra, box):
     body[..., :3] = cv2.inpaint(c[..., :3], cv2.dilate(pm, np.ones((5, 5), np.uint8)), 15, cv2.INPAINT_TELEA)
     pupil = c.copy()
     pupil[..., 3] = np.minimum(c[..., 3], cv2.GaussianBlur(pm, (0, 0), 1.5))
-    px, _, pw, _ = cv2.boundingRect(core)
-    return body, pupil, (px + pw / 2) / w  # pupil centre as fraction of box width
+    px, _, pw, _ = cv2.boundingRect(pm)
+    # pupil centre as fraction of box width, and the pupil's column span on the canvas
+    return body, pupil, (px + pw / 2) / w, (x + px, x + px + pw - 1)
 
 
 def marks_alpha(bgr, eye_zone):
@@ -202,7 +217,7 @@ def main():
     # iris + pupil
     iris = load("iris.png", cv2.IMREAD_UNCHANGED)
     ibox = bbox((iris[..., 3] > 128).astype(np.uint8), pad=4)
-    body, pupil, pupil_cx = split_pupil(iris, ibox)
+    body, pupil, pupil_cx, pupil_span = split_pupil(iris, ibox)
     save_webp(body, OUT / "iris.webp")
     save_webp(pupil, OUT / "pupil.webp")
     layers["iris"] = pct(ibox)
@@ -233,7 +248,7 @@ def main():
     soft_region = cv2.GaussianBlur(region, (0, 0), 12).astype(np.float32) / 255
     names = []
     for n, f in frames.items():
-        hole = opening_mask(f, sclera)
+        hole = opening_mask(f, sclera, (pupil_span[0] - 10, pupil_span[1] + 10))
         hole = cv2.GaussianBlur(cv2.dilate(hole, ellipse(3)), (0, 0), 1.2).astype(np.float32) / 255
         alpha = (soft_region * (1 - hole) * 255).clip(0, 255).astype(np.uint8)
         patch = np.dstack([f, alpha])[ry:ry + rh, rx:rx + rw]
