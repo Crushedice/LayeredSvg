@@ -1,5 +1,9 @@
 /* Nix eye — layered 2.5D eye. Box positions come from layers/layers.css.
    Visual state per affect lives here as custom properties; timers live in eye.js. */
+/* registered so the marking colour can transition between affects */
+@property --mark-hue { syntax: "<angle>"; inherits: true; initial-value: 0deg; }
+@property --mark-sat { syntax: "<number>"; inherits: true; initial-value: 1; }
+@property --mark-lum { syntax: "<number>"; inherits: true; initial-value: 1; }
 .nix-eye {
   --pupil: 1;          /* scaleX of the slit */
   --iris-lum: 1;       /* iris brightness */
@@ -9,6 +13,11 @@
   --glow-sweep: 3s;
   --saccade-ms: 45ms;
   --glow-color: #ff6a00;
+  --mark-hue: 0deg;    /* hue shift of the face markings, from their painted orange */
+  --mark-sat: 1;
+  --mark-lum: 1;
+  --mark-shift: hue-rotate(var(--mark-hue)) saturate(var(--mark-sat)) brightness(var(--mark-lum));
+  transition: --mark-hue .9s ease, --mark-sat .9s ease, --mark-lum .9s ease;
   position: relative;
   width: 100%;
   max-width: 100%;
@@ -41,16 +50,20 @@
   pointer-events: none;
 }
 
-/* blink frames: one visible at a time, swapped by eye.js */
-.nix-eye .nix-lid { width: 100%; height: 100%; max-width: none; display: block; position: absolute; inset: 0; }
+/* face markings: a copy of the painted lines, recoloured in place */
+.nix-eye .nix-marks { filter: var(--mark-shift); }
+
+/* blink frames: one visible at a time, swapped by eye.js. Each carries its own
+   markings layer because the slashes on the lid move with it. */
+.nix-eye .nix-lid { position: absolute; inset: 0; }
 .nix-eye .nix-lid[hidden] { display: none; }
 
 /* circuit glow */
-.nix-eye .nix-glow-dim { filter: brightness(.35) saturate(.6); opacity: var(--glow-dim); }
-.nix-eye .nix-glow-base { mix-blend-mode: screen; opacity: var(--glow-base); }
+.nix-eye .nix-glow-dim { filter: brightness(.35) saturate(.6) var(--mark-shift); opacity: var(--glow-dim); }
+.nix-eye .nix-glow-base { mix-blend-mode: screen; opacity: var(--glow-base); filter: var(--mark-shift); }
 .nix-eye .nix-glow-band {
   mix-blend-mode: screen;
-  filter: brightness(var(--glow-band)) drop-shadow(0 0 6px var(--glow-color));
+  filter: brightness(var(--glow-band)) drop-shadow(0 0 6px var(--glow-color)) var(--mark-shift);
   -webkit-mask: linear-gradient(to bottom, transparent 38%, #000 47%, #000 53%, transparent 62%) 0 100% / 100% 300% no-repeat;
   mask: linear-gradient(to bottom, transparent 38%, #000 47%, #000 53%, transparent 62%) 0 100% / 100% 300% no-repeat;
   animation: nix-sweep var(--glow-sweep) linear infinite;
@@ -61,11 +74,12 @@
 }
 
 /* affect states */
-.nix-eye[data-affect="sharp"]    { --pupil: .7;  --iris-lum: 1.12; --glow-base: .3;  --glow-band: 1.8; --glow-sweep: 1.8s; }
-.nix-eye[data-affect="engaged"]  { --pupil: 1.35; --iris-lum: 1.05; --glow-base: .2;  --glow-band: 1.5; --glow-sweep: 2.5s; }
-.nix-eye[data-affect="reticent"] { --pupil: .9;  --iris-lum: .9;  --glow-base: 0;   --glow-band: 1.1; --glow-sweep: 4.5s; --glow-dim: .3; }
-.nix-eye[data-affect="flat"]     { --pupil: 1;   --iris-lum: .82; --glow-base: 0;   --glow-band: .9;  --glow-sweep: 7s; --glow-dim: .65; }
+.nix-eye[data-affect="sharp"]    { --mark-hue: -24deg; --mark-sat: 1.15; --pupil: .7;  --iris-lum: 1.12; --glow-base: .3;  --glow-band: 1.8; --glow-sweep: 1.8s; }
+.nix-eye[data-affect="engaged"]  { --mark-hue: 18deg; --mark-sat: 1.05; --pupil: 1.35; --iris-lum: 1.05; --glow-base: .2;  --glow-band: 1.5; --glow-sweep: 2.5s; }
+.nix-eye[data-affect="reticent"] { --mark-hue: 235deg; --mark-sat: .9; --pupil: .9;  --iris-lum: .9;  --glow-base: 0;   --glow-band: 1.1; --glow-sweep: 4.5s; --glow-dim: .3; }
+.nix-eye[data-affect="flat"]     { --mark-hue: 175deg; --mark-sat: .3; --mark-lum: .75; --pupil: 1;   --iris-lum: .82; --glow-base: 0;   --glow-band: .9;  --glow-sweep: 7s; --glow-dim: .65; }
 
 @media (prefers-reduced-motion: reduce) {
+  .nix-eye { transition: none; }
   .nix-eye .nix-glow-band { animation: none; -webkit-mask-position: 0 50%; mask-position: 0 50%; }
 }

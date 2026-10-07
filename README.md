@@ -4,7 +4,8 @@
 
 A layered 2.5D eye built from painted frames: frame-swap blinks, saccades,
 a swept glow mask over the circuit lines, and affect states
-(`idle`, `sharp`, `engaged`, `reticent`, `flat`).
+(`idle`, `sharp`, `engaged`, `reticent`, `flat`). Each affect also shifts the
+hue of the face markings: crimson, amber, violet, or a drained grey-teal.
 
 ```
 assets-src/nix-eye/        source PNGs (base, iris, glow, blink-02 … blink-09-closed)
@@ -28,6 +29,9 @@ The script:
 - crops each blink frame to the eye region with a feathered edge and cuts the
   eye opening out of it, so the live iris keeps moving through a blink and
   while a half-closed lid is held,
+- copies the warm face markings (circuit lines and the slashes above the eye)
+  into `marks.webp`, plus one per blink frame since the slashes sit on the lid,
+  so CSS can hue-shift them per affect,
 - crops the glow lines and writes every layer's position into `layers.css`.
 
 ### Run the demo

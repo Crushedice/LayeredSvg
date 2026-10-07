@@ -7,8 +7,11 @@ Reads assets-src/nix-eye/*.png and writes, into prototype/nix-eye/layers/:
   iris.webp        iris with the pupil slit inpainted away
   pupil.webp       pupil slit + rim, same box as iris.webp (scaled for affect)
   glow.webp        orange circuit lines on transparency
+  marks.webp       every warm face marking (lines, slashes) copied from the
+                   base, hue-shifted per affect in CSS
   blink-NN.webp    eye-region patch per blink frame, eye opening cut out so
                    the live iris keeps showing (and moving) through a blink
+  blink-NN-marks.webp  that frame's own markings (the slashes ride on the lid)
   sclera.svg       clip path of the eye opening, in canvas coordinates
   layers.css       per-layer box positions as % of the canvas
   layers.json      the same boxes + frame list, for other front-ends
@@ -76,7 +79,7 @@ def bbox(mask, pad=0):
 
 def save_webp(bgra, path):
     rgba = cv2.cvtColor(bgra, cv2.COLOR_BGRA2RGBA)
-    Image.fromarray(rgba).save(path, "WEBP", quality=WEBP_Q, method=6, exact=True)
+    Image.fromarray(rgba).save(path, "WEBP", quality=WEBP_Q, method=6)
 
 
 def eye_window(mask, y0=250, y1=850, x0=300, x1=1150):
@@ -147,6 +150,25 @@ def split_pupil(iris_bgra, box):
     return body, pupil, (px + pw / 2) / w  # pupil centre as fraction of box width
 
 
+def marks_alpha(bgr, eye_zone):
+    """Soft alpha of the saturated warm face markings plus their glow halo.
+
+    Shapes touching eye_zone (lower lid rim, outer-corner triangle) belong to the
+    eye, not the markings, and are dropped whole so none is left half-recoloured.
+    """
+    h, s, v = hsv_split(bgr)
+    s, v = s / 255, v / 255
+    warm = ((h < 28) | (h > 165)).astype(np.float32)
+    core = np.clip((s - .35) / .35, 0, 1) * np.clip((v - .25) / .35, 0, 1) * warm
+    core[:, :120] = 0  # ear piece on the far left is not a marking
+    n, lab, _, _ = cv2.connectedComponentsWithStats((core > .1).astype(np.uint8))
+    touching = list(set(np.unique(lab[eye_zone > 0])) - {0})
+    core[cv2.dilate(np.isin(lab, touching).astype(np.uint8), np.ones((5, 5), np.uint8)) > 0] = 0
+    loose = np.clip((s - .15) / .3, 0, 1) * np.clip((v - .1) / .25, 0, 1) * warm
+    halo = np.minimum(cv2.GaussianBlur(core, (0, 0), 5) * 3, loose)
+    return np.maximum(core, halo)
+
+
 def mask_to_path(mask):
     cs, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
     c = max(cs, key=cv2.contourArea)
@@ -192,6 +214,18 @@ def main():
     save_webp(glow[gy:gy + gh, gx:gx + gw], OUT / "glow.webp")
     layers["glow"] = pct(gbox)
 
+    # face markings. The lower half of the eye never moves during a blink, so warm shapes
+    # touching it (lid rim, corner triangle) are the eye's own colour in every frame.
+    ys = np.where(sclera.any(axis=1))[0]
+    eye_zone = sclera.copy()
+    eye_zone[: (ys.min() + ys.max()) // 2] = 0
+    eye_zone = cv2.dilate(eye_zone, np.ones((21, 21), np.uint8))
+    ma = marks_alpha(base, eye_zone)
+    mbox = bbox((ma > .02).astype(np.uint8))
+    mx, my, mw, mh = mbox
+    save_webp(np.dstack([base, (ma * 255).astype(np.uint8)])[my:my + mh, mx:mx + mw], OUT / "marks.webp")
+    layers["marks"] = pct(mbox)
+
     # blink patches
     region = blink_region(base, frames.values())
     rbox = bbox(region)
@@ -205,6 +239,8 @@ def main():
         patch = np.dstack([f, alpha])[ry:ry + rh, rx:rx + rw]
         name = f"blink-{n.split('-')[0]}"
         save_webp(patch, OUT / f"{name}.webp")
+        fa = (marks_alpha(f, eye_zone) * alpha).clip(0, 255).astype(np.uint8)
+        save_webp(np.dstack([f, fa])[ry:ry + rh, rx:rx + rw], OUT / f"{name}-marks.webp")
         names.append(name)
     layers["blink"] = pct(rbox)
 
